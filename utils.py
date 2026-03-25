@@ -1,11 +1,13 @@
 import requests
 import os
+import time
 from google import genai
+
 # Initialize Gemini client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
 
-# Extract video ID
+#  Extract video ID
 def extract_video_id(url):
     if "youtu.be" in url:
         return url.split("/")[-1].split("?")[0]
@@ -15,7 +17,7 @@ def extract_video_id(url):
         return url
 
 
-# Get transcript
+# 📄 Get transcript (RapidAPI)
 def get_transcript(video_id):
     url = "https://youtube-transcriptor.p.rapidapi.com/transcript"
 
@@ -27,10 +29,10 @@ def get_transcript(video_id):
     querystring = {"video_id": video_id}
 
     try:
-        response = requests.get(url, headers=headers, params=querystring)
+        response = requests.get(url, headers=headers, params=querystring, timeout=10)
         data = response.json()
 
-        # 🔥 Correct extraction
+        #  Correct extraction
         if isinstance(data, list) and len(data) > 0:
             return data[0].get("transcriptionAsText", "Transcript not found.")
 
@@ -40,53 +42,67 @@ def get_transcript(video_id):
         return f"Transcript not available. Error: {str(e)}"
 
 
-# Summarize
+#  Summarize
 def summarize_text(text):
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=f"""
-            You are an expert content summarizer.
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=f"""
+                You are an expert summarizer.
 
-            Summarize this YouTube transcript:
+                IMPORTANT: Always respond in English.
 
-            - Keep it concise
-            - Highlight key ideas
-            - Remove repetition
-            - Make it easy to read
+                Summarize this transcript clearly and concisely.
+                Highlight key ideas and remove repetition.
 
-            Transcript:
-            {text[:3000]}
-            """
-        )
-        return response.text
-    except Exception as e:
-        return f"Summarization failed: {str(e)}"
+                Transcript:
+                {text[:3000]}
+                """
+            )
+            return response.text
+
+        except Exception as e:
+            if "503" in str(e):
+                time.sleep(2)
+            else:
+                return f"Summarization failed: {str(e)}"
+
+    return "⚠️ Server busy. Please try again."
 
 
-# Generate article
+#  Generate article (Markdown)
 def generate_article(summary):
-    try:
-        response = client.models.generate_content(
-            model="gemini-2.5-flash-lite",
-            contents=f"""
-            You are a professional blog writer.
+    for attempt in range(3):
+        try:
+            response = client.models.generate_content(
+                model="gemini-2.5-flash-lite",
+                contents=f"""
+                You are a professional content writer.
 
-            Convert this into a high-quality article:
+                IMPORTANT: Write in English.
 
-            - Catchy Title
-            - Engaging Introduction
-            - Key Takeaways (bullet points)
-            - Detailed Explanation
-            - Real-world relevance
-            - Conclusion
+                Convert the summary into a structured MARKDOWN article.
 
-            Make it engaging and human-like.
+                Include:
+                - # Title
+                - ## Introduction
+                - ## Key Takeaways (bullet points)
+                - ## Detailed Explanation
+                - ## Conclusion
 
-            Summary:
-            {summary}
-            """
-        )
-        return response.text
-    except Exception as e:
-        return f"Article generation failed: {str(e)}"
+                Make it clean, engaging, and easy to read.
+
+                Summary:
+                {summary}
+                """
+            )
+            return response.text
+
+        except Exception as e:
+            if "503" in str(e):
+                time.sleep(2)
+            else:
+                return f"Article generation failed: {str(e)}"
+
+    return "⚠️ Server busy. Please try again."
