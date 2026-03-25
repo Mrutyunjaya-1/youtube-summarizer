@@ -1,33 +1,70 @@
-import streamlit as st
+import gradio as gr
 from utils import *
+import requests
 
-st.title("🎥 YouTube Summarizer (Gemini AI)")
-st.caption("Paste any YouTube video link and generate a summary + article")
-url = st.text_input("Enter YouTube URL")
-if st.button("Generate"):
 
+def get_video_details(video_id):
+    url = f"https://www.youtube.com/oembed?url=http://www.youtube.com/watch?v={video_id}&format=json"
+    try:
+        res = requests.get(url).json()
+        return res.get("title"), res.get("thumbnail_url")
+    except:
+        return "YouTube Video", None
+
+
+def process(url):
     if not url:
-        st.warning("Please enter a YouTube URL")
-    else:
-        video_id = extract_video_id(url)
-        text = get_transcript(video_id)
+        return None, "", "Please enter URL", ""
 
-        if "not available" in text.lower():
-            st.error(text)
-        else:
-            with st.spinner("Processing..."):
-                summary = summarize_text(text)
-                article = generate_article(summary)
+    video_id = extract_video_id(url)
 
-            st.subheader("Summary")
-            st.write(summary)
+    title, thumbnail = get_video_details(video_id)
+    text = get_transcript(video_id)
 
-            st.subheader("Article")
-            st.markdown(article)
+    if "not available" in text.lower():
+        return thumbnail, title, text, ""
 
-            st.download_button(
-                label="Download Article",
-                data=article,
-                file_name="article.md",
-                mime="text/markdown"
-            )
+    summary = summarize_text(text)
+    article = generate_article(summary)
+
+    return thumbnail, title, summary, article
+
+
+def save_markdown(article):
+    file_path = "article.md"
+    with open(file_path, "w", encoding="utf-8") as f:
+        f.write(article)
+    return file_path
+
+
+with gr.Blocks(theme=gr.themes.Soft()) as demo:
+    gr.Markdown("# 🎥 YouTube → Article Generator (GenAI)")
+    gr.Markdown("Convert YouTube videos into summaries and structured articles (Markdown)")
+
+    with gr.Row():
+        url = gr.Textbox(label="Enter YouTube URL", scale=4)
+        btn = gr.Button("Generate", variant="primary")
+
+    thumbnail = gr.Image(label="Thumbnail")
+    title = gr.Textbox(label="Video Title")
+
+    summary = gr.Textbox(label="Summary", lines=8)
+
+    # 🔥 Markdown Output
+    article = gr.Markdown(label="Generated Article")
+
+    download_btn = gr.File(label="Download Article (.md)")
+
+    btn.click(
+        process,
+        inputs=url,
+        outputs=[thumbnail, title, summary, article]
+    )
+
+    article.change(
+        save_markdown,
+        inputs=article,
+        outputs=download_btn
+    )
+
+demo.launch()
