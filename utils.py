@@ -1,10 +1,6 @@
-from youtube_transcript_api import YouTubeTranscriptApi
-from google import genai
+import requests
 import os
-from dotenv import load_dotenv
-
-load_dotenv()
-
+from google import genai
 # Initialize Gemini client
 client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
 
@@ -21,22 +17,24 @@ def extract_video_id(url):
 
 # Get transcript
 def get_transcript(video_id):
+    url = "https://youtube-transcriptor.p.rapidapi.com/transcript"
+
+    headers = {
+        "X-RapidAPI-Key": os.getenv("RAPIDAPI_KEY"),
+        "X-RapidAPI-Host": "youtube-transcriptor.p.rapidapi.com"
+    }
+
+    querystring = {"video_id": video_id}
+
     try:
-        api = YouTubeTranscriptApi()
+        response = requests.get(url, headers=headers, params=querystring)
+        data = response.json()
 
-        transcript_list = api.list(video_id)
+        # 🔥 Correct extraction
+        if isinstance(data, list) and len(data) > 0:
+            return data[0].get("transcriptionAsText", "Transcript not found.")
 
-        # Try English
-        try:
-            transcript = transcript_list.find_transcript(['en'])
-        except:
-            # Fallback to any available language
-            transcript = transcript_list.find_transcript(
-                [t.language_code for t in transcript_list]
-            )
-
-        fetched = transcript.fetch()
-        return " ".join([t.text for t in fetched])
+        return "Transcript not available."
 
     except Exception as e:
         return f"Transcript not available. Error: {str(e)}"
